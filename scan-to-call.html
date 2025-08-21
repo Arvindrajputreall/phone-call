@@ -1,115 +1,196 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Scan-to-Call</title>
-  <meta name="description" content="Scan a QR code to instantly call the embedded phone number." />
-  <style>
-    body { margin:0; font-family: system-ui, Arial, sans-serif; background:#0b1220; color:#e5e7eb; }
-    header { text-align:center; padding: 16px; }
-    h1 { margin:0; font-size: 28px; }
-    .wrap { max-width: 880px; margin: 0 auto; padding: 24px; }
-    .card { background:#111827; border-radius:14px; padding:16px; box-shadow:0 8px 20px rgba(0,0,0,0.3); margin-bottom:20px; }
-    .btn { background:#2563eb; color:white; border:0; padding:12px 16px; border-radius:10px; font-weight:700; cursor:pointer; }
-    .btn:disabled { opacity:.5; cursor:not-allowed; }
-    .muted { color:#9ca3af; font-size:14px; }
-    #reader { width:100%; }
-    #callLink { display:none; margin-top:10px; }
-    pre { background:#0b1220; border:1px solid #374151; padding:12px; border-radius:10px; min-height:50px; }
-  </style>
-  <!-- QR scanning library -->
-  <script src="https://unpkg.com/html5-qrcode@2.3.10/minified/html5-qrcode.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phone Number Scanner</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        #video-container {
+            position: relative;
+            width: 100%;
+            padding-top: 100%; /* 1:1 Aspect Ratio */
+            overflow: hidden;
+            border-radius: 1.5rem; /* rounded-3xl */
+        }
+        #video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1); /* Mirror view */
+        }
+        #overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 80%;
+            height: 25%;
+            border: 3px dashed rgba(255, 255, 255, 0.7);
+            transform: translate(-50%, -50%);
+            border-radius: 1rem;
+            box-shadow: 0 0 0 9999px rgba(0,0,0,0.5);
+        }
+    </style>
 </head>
-<body>
-  <header>
-    <h1>📞 Scan-to-Call</h1>
-    <p class="muted">Point your camera at a QR code containing a phone number.</p>
-  </header>
-  <div class="wrap">
-    <div class="card">
-      <div id="reader"></div>
-      <p id="status" class="muted">Waiting for camera access…</p>
-      <button id="startBtn" class="btn">Start Scanner</button>
-      <button id="stopBtn" class="btn" disabled>Stop</button>
+<body class="bg-gray-900 text-white flex flex-col items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-md mx-auto text-center">
+        <h1 class="text-3xl font-bold mb-2">Phone Number Scanner</h1>
+        <p class="text-gray-400 mb-6">Point your camera at a phone number to scan it.</p>
+
+        <div id="main-container">
+            <!-- Initial state: Start button -->
+            <div id="start-view">
+                <button id="start-button" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 px-6 rounded-xl text-lg transition-transform transform hover:scale-105 shadow-lg">
+                    Start Camera
+                </button>
+            </div>
+
+            <!-- Scanner state: Video feed and controls -->
+            <div id="scanner-view" class="hidden">
+                <div id="video-container" class="bg-gray-800 shadow-2xl mb-4">
+                    <video id="video" playsinline></video>
+                    <div id="overlay"></div>
+                </div>
+                
+                <div id="status-box" class="h-12 flex items-center justify-center bg-gray-800 rounded-xl p-3 mb-4">
+                    <p id="status-text" class="text-gray-400">Initializing scanner...</p>
+                </div>
+
+                <div id="result-view" class="hidden">
+                    <p class="text-lg mb-2">Number Found:</p>
+                    <p id="result-text" class="text-4xl font-bold text-green-400 mb-4 tracking-wider"></p>
+                    <a id="dial-button" href="#" class="block w-full bg-green-500 hover:bg-green-600 text-white font-bold py-4 px-6 rounded-xl text-lg transition-transform transform hover:scale-105 shadow-lg">
+                        Dial Number
+                    </a>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <div class="card">
-      <h2>Result</h2>
-      <pre id="raw"></pre>
-      <a id="callLink" class="btn" href="#">📲 Call this number</a>
-      <p id="parsed" class="muted"></p>
-    </div>
-  </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const startButton = document.getElementById('start-button');
+            const startView = document.getElementById('start-view');
+            const scannerView = document.getElementById('scanner-view');
+            const video = document.getElementById('video');
+            const statusText = document.getElementById('status-text');
+            const resultView = document.getElementById('result-view');
+            const resultText = document.getElementById('result-text');
+            const dialButton = document.getElementById('dial-button');
 
-  <script>
-    const statusEl = document.getElementById('status');
-    const rawEl = document.getElementById('raw');
-    const parsedEl = document.getElementById('parsed');
-    const callLink = document.getElementById('callLink');
-    const startBtn = document.getElementById('startBtn');
-    const stopBtn = document.getElementById('stopBtn');
+            let worker;
+            let isScanning = false;
 
-    function extractPhone(text) {
-      if (!text) return null;
-      let s = text.trim();
-      if (s.toLowerCase().startsWith("tel:")) s = s.slice(4);
-      s = s.replace(/[^+0-9]/g, '');
-      if (s.length < 7) return null;
-      if (!s.startsWith('+') && s.length >= 10) s = '+' + s;
-      return s;
-    }
+            // 1. Initialize the Tesseract worker
+            async function initializeWorker() {
+                statusText.textContent = 'Loading OCR engine...';
+                worker = await Tesseract.createWorker('eng');
+                statusText.textContent = 'Ready to scan. Point camera at a number.';
+            }
 
-    function updateUI(scanned, phone) {
-      rawEl.textContent = scanned || '';
-      if (phone) {
-        parsedEl.textContent = "Detected phone: " + phone;
-        callLink.href = "tel:" + phone;
-        callLink.style.display = "inline-block";
-      } else {
-        parsedEl.textContent = "No valid phone detected yet.";
-        callLink.style.display = "none";
-      }
-    }
+            // 2. Start the camera feed
+            async function startCamera() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        video: {
+                            facingMode: 'environment' // Prefer back camera
+                        }
+                    });
+                    video.srcObject = stream;
+                    await video.play();
 
-    let html5Qrcode;
-    let isRunning = false;
+                    startView.classList.add('hidden');
+                    scannerView.classList.remove('hidden');
+                    
+                    isScanning = true;
+                    requestAnimationFrame(scanFrame);
 
-    async function startScanner() {
-      if (!html5Qrcode) {
-        html5Qrcode = new Html5Qrcode('reader');
-      }
-      try {
-        await html5Qrcode.start(
-          { facingMode: "environment" },
-          { fps: 10, qrbox: { width: 250, height: 250 } },
-          (decodedText) => {
-            const phone = extractPhone(decodedText);
-            updateUI(decodedText, phone);
-          }
-        );
-        statusEl.textContent = "Scanning…";
-        isRunning = true;
-        startBtn.disabled = true;
-        stopBtn.disabled = false;
-      } catch (err) {
-        statusEl.textContent = "Camera error: " + err;
-      }
-    }
+                } catch (err) {
+                    console.error("Camera Error:", err);
+                    statusText.textContent = 'Could not access camera.';
+                    alert('Error: Could not access the camera. Please grant permission and try again.');
+                }
+            }
+            
+            // 3. Scan a single frame from the video
+            async function scanFrame() {
+                if (!isScanning || !worker) {
+                    return;
+                }
 
-    async function stopScanner() {
-      if (html5Qrcode && isRunning) {
-        await html5Qrcode.stop();
-        await html5Qrcode.clear();
-        statusEl.textContent = "Scanner stopped.";
-        isRunning = false;
-        startBtn.disabled = false;
-        stopBtn.disabled = true;
-      }
-    }
+                // Create a canvas to draw the video frame onto
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                
+                // Set canvas dimensions to match the video
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
 
-    startBtn.addEventListener("click", startScanner);
-    stopBtn.addEventListener("click", stopScanner);
-  </script>
+                // Draw the current video frame to the canvas
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                try {
+                    // Use Tesseract to recognize text from the canvas
+                    const { data: { text } } = await worker.recognize(canvas);
+                    
+                    // Use a regular expression to find phone numbers
+                    const phoneNumber = findPhoneNumber(text);
+                    
+                    if (phoneNumber) {
+                        // If a number is found, show it and stop scanning
+                        isScanning = false;
+                        statusText.textContent = 'Scan complete!';
+                        resultText.textContent = phoneNumber;
+                        dialButton.href = `tel:${phoneNumber.replace(/\s/g, '')}`; // Set the dial link
+                        resultView.classList.remove('hidden');
+                        
+                        // Vibrate the device to give feedback
+                        if ('vibrate' in navigator) {
+                            navigator.vibrate(200);
+                        }
+                    } else {
+                        // If no number found, continue scanning the next frame
+                        requestAnimationFrame(scanFrame);
+                    }
+                } catch (error) {
+                    console.error('OCR Error:', error);
+                    // Continue scanning even if one frame fails
+                    requestAnimationFrame(scanFrame);
+                }
+            }
+
+            // 4. Regex to find phone numbers in various formats
+            function findPhoneNumber(text) {
+                // This regex looks for common phone number patterns
+                // It can find numbers like (123) 456-7890, 123-456-7890, 123 456 7890, +1 123 456 7890 etc.
+                const phoneRegex = /(?:(?:\+?1\s*(?:[.-]\s*)?)?(?:\(\s*([2-9]1[02-9]|[2-9][02-8]1|[2-9][02-8][02-9])\s*\)|([2-9]1[02-9]|[2-9][02-8]1|[2-9][02-8][02-9]))\s*(?:[.-]\s*)?)?([2-9]1[02-9]|[2-9][02-8][02-9])\s*(?:[.-]\s*)?([0-9]{4})(?:\s*(?:#|x\.?|ext\.?|extension)\s*(\d+))?/img;
+                const matches = text.match(phoneRegex);
+                
+                if (matches && matches.length > 0) {
+                    // Return the first valid-looking match
+                    return matches[0].trim();
+                }
+                return null;
+            }
+
+            // Event listener for the start button
+            startButton.addEventListener('click', () => {
+                startButton.disabled = true;
+                startButton.textContent = 'Starting...';
+                initializeWorker().then(startCamera);
+            });
+        });
+    </script>
 </body>
 </html>
