@@ -6,184 +6,110 @@
   <title>Scan-to-Call</title>
   <meta name="description" content="Scan a QR code to instantly call the embedded phone number." />
   <style>
-    :root { --accent:#2563eb; --bg:#0b1220; --card:#0f172a; --text:#e5e7eb; }
-    html, body { height: 100%; }
-    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: linear-gradient(180deg, #0b1220, #0b1220 40%, #111827); color: var(--text); }
+    body { margin:0; font-family: system-ui, Arial, sans-serif; background:#0b1220; color:#e5e7eb; }
+    header { text-align:center; padding: 16px; }
+    h1 { margin:0; font-size: 28px; }
     .wrap { max-width: 880px; margin: 0 auto; padding: 24px; }
-    header { text-align:center; padding: 16px 0 8px; }
-    h1 { margin:0; font-size: clamp(22px, 4vw, 36px); }
-    .card { background: var(--card); border:1px solid #1f2937; border-radius: 14px; padding: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.25); }
-    .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
-    @media (min-width: 840px){ .grid { grid-template-columns: 1.2fr .8fr; } }
-    .btn { background: var(--accent); color: white; border:0; padding: 12px 16px; border-radius: 10px; font-weight: 700; cursor: pointer; }
+    .card { background:#111827; border-radius:14px; padding:16px; box-shadow:0 8px 20px rgba(0,0,0,0.3); margin-bottom:20px; }
+    .btn { background:#2563eb; color:white; border:0; padding:12px 16px; border-radius:10px; font-weight:700; cursor:pointer; }
     .btn:disabled { opacity:.5; cursor:not-allowed; }
     .muted { color:#9ca3af; font-size:14px; }
-    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-    #status { font-size:14px; }
-    a.btn { text-decoration:none; display:inline-block; }
-    .kbd { background:#111827; border:1px solid #374151; border-bottom-width:2px; padding:2px 6px; border-radius:6px; font-size:12px; color:#d1d5db; }
-    .ok { color:#22c55e; }
-    .warn { color:#f59e0b; }
-    .err { color:#ef4444; }
-    footer { text-align:center; padding:24px; color:#9ca3af; font-size: 13px; }
-    .small { font-size: 13px; }
-    input[type='tel'], input[type='text'] { width:100%; padding:10px 12px; border-radius:10px; border:1px solid #334155; background:#0b1220; color:#e5e7eb; }
-    label { font-size: 14px; color:#cbd5e1; }
+    #reader { width:100%; }
+    #callLink { display:none; margin-top:10px; }
+    pre { background:#0b1220; border:1px solid #374151; padding:12px; border-radius:10px; min-height:50px; }
   </style>
   <!-- QR scanning library -->
   <script src="https://unpkg.com/html5-qrcode@2.3.10/minified/html5-qrcode.min.js"></script>
 </head>
 <body>
+  <header>
+    <h1>📞 Scan-to-Call</h1>
+    <p class="muted">Point your camera at a QR code containing a phone number.</p>
+  </header>
   <div class="wrap">
-    <header>
-      <h1>📞 Scan‑to‑Call</h1>
-      <p class="muted">Point your camera at a QR code that contains a phone number. We’ll show a one‑tap call button.</p>
-    </header>
-
-    <div class="grid">
-      <section class="card">
-        <div id="reader" style="width:100%;"></div>
-        <p id="status" class="muted">Camera initializing… If asked, choose <span class="kbd">Allow</span> to grant camera access.</p>
-        <div class="row" style="justify-content:space-between;">
-          <button id="startBtn" class="btn">Start Scanner</button>
-          <button id="stopBtn" class="btn" disabled>Stop</button>
-        </div>
-      </section>
-
-      <section class="card">
-        <h2 style="margin-top:0;">Result</h2>
-        <div class="small muted">Scanned content:</div>
-        <pre id="raw" style="white-space: pre-wrap; background:#0b1220; border:1px solid #334155; padding:12px; border-radius:10px; min-height:60px;"></pre>
-
-        <div class="row" style="margin: 8px 0;">
-          <a id="callLink" class="btn" href="#" style="display:none;">📲 Call this number</a>
-          <span id="parsed" class="muted"></span>
-        </div>
-
-        <hr style="border:0; border-top:1px solid #1f2937; margin:14px 0;" />
-
-        <div class="small muted">Or enter a number manually:</div>
-        <label for="manual">Phone number</label>
-        <input id="manual" type="tel" placeholder="+91 98765 43210" />
-        <div class="row" style="margin-top:8px;">
-          <a id="manualCall" class="btn" href="#">Call</a>
-        </div>
-
-        <p class="muted small" style="margin-top:12px;">Tip: Encode numbers as <code>tel:+919876543210</code> or just <code>+91 98765 43210</code> in your QR.</p>
-      </section>
+    <div class="card">
+      <div id="reader"></div>
+      <p id="status" class="muted">Waiting for camera access…</p>
+      <button id="startBtn" class="btn">Start Scanner</button>
+      <button id="stopBtn" class="btn" disabled>Stop</button>
     </div>
 
-    <footer>Works best over HTTPS (GitHub Pages is HTTPS). No data leaves your device.</footer>
+    <div class="card">
+      <h2>Result</h2>
+      <pre id="raw"></pre>
+      <a id="callLink" class="btn" href="#">📲 Call this number</a>
+      <p id="parsed" class="muted"></p>
+    </div>
   </div>
 
   <script>
-    // Utilities
-    const byId = (id) => document.getElementById(id);
-    const statusEl = byId('status');
-    const rawEl = byId('raw');
-    const parsedEl = byId('parsed');
-    const callLink = byId('callLink');
-    const manual = byId('manual');
-    const manualCall = byId('manualCall');
-    const startBtn = byId('startBtn');
-    const stopBtn = byId('stopBtn');
+    const statusEl = document.getElementById('status');
+    const rawEl = document.getElementById('raw');
+    const parsedEl = document.getElementById('parsed');
+    const callLink = document.getElementById('callLink');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
 
-    // Very simple phone extractor: supports tel:... or raw numbers with + and digits
     function extractPhone(text) {
       if (!text) return null;
-      let s = String(text).trim();
-      // If it starts with tel: or TEL:
-      const telMatch = s.match(/^tel:\s*(.+)$/i);
-      if (telMatch) s = telMatch[1];
-      // Keep only + and digits
+      let s = text.trim();
+      if (s.toLowerCase().startsWith("tel:")) s = s.slice(4);
       s = s.replace(/[^+0-9]/g, '');
-      // Basic validation: at least 7 digits (adjust as needed)
-      const digits = s.replace(/\D/g, '');
-      if (digits.length < 7) return null;
-      // Ensure it starts with + for international format if not already
-      if (!s.startsWith('+') && digits.length >= 10) {
-        s = '+' + digits;
-      }
+      if (s.length < 7) return null;
+      if (!s.startsWith('+') && s.length >= 10) s = '+' + s;
       return s;
     }
 
     function updateUI(scanned, phone) {
       rawEl.textContent = scanned || '';
       if (phone) {
-        parsedEl.innerHTML = '<span class="ok">Detected phone:</span> ' + phone;
-        callLink.href = 'tel:' + phone;
-        callLink.style.display = 'inline-block';
+        parsedEl.textContent = "Detected phone: " + phone;
+        callLink.href = "tel:" + phone;
+        callLink.style.display = "inline-block";
       } else {
-        parsedEl.innerHTML = '<span class="warn">No valid phone detected yet.</span>';
-        callLink.style.display = 'none';
+        parsedEl.textContent = "No valid phone detected yet.";
+        callLink.style.display = "none";
       }
     }
 
-    manualCall.addEventListener('click', (e) => {
-      const p = extractPhone(manual.value);
-      if (!p) { e.preventDefault(); alert('Please enter a valid phone number.'); return; }
-      manualCall.href = 'tel:' + p;
-    });
-
-    // Initialize scanner
     let html5Qrcode;
     let isRunning = false;
 
     async function startScanner() {
+      if (!html5Qrcode) {
+        html5Qrcode = new Html5Qrcode('reader');
+      }
       try {
-        if (!html5Qrcode) {
-          html5Qrcode = new Html5Qrcode('reader', { formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ]});
-        }
-        statusEl.textContent = 'Starting camera…';
         await html5Qrcode.start(
-          { facingMode: 'environment' }, // back camera
-          { fps: 10, qrbox: { width: 280, height: 280 } },
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 250, height: 250 } },
           (decodedText) => {
             const phone = extractPhone(decodedText);
             updateUI(decodedText, phone);
-          },
-          (errorMessage) => {
-            // Ignore frequent decode errors; update status occasionally
-            statusEl.textContent = 'Scanning…';
           }
         );
+        statusEl.textContent = "Scanning…";
         isRunning = true;
         startBtn.disabled = true;
         stopBtn.disabled = false;
-        statusEl.textContent = 'Scanning… Point to a QR code.';
       } catch (err) {
-        console.error(err);
-        statusEl.innerHTML = '<span class="err">Camera error:</span> ' + (err && err.message ? err.message : err);
+        statusEl.textContent = "Camera error: " + err;
       }
     }
 
     async function stopScanner() {
-      try {
-        if (html5Qrcode && isRunning) {
-          await html5Qrcode.stop();
-          await html5Qrcode.clear();
-          isRunning = false;
-          statusEl.textContent = 'Scanner stopped.';
-        }
-      } catch (err) {
-        console.error(err);
-        statusEl.innerHTML = '<span class="err">Stop error:</span> ' + (err && err.message ? err.message : err);
-      } finally {
+      if (html5Qrcode && isRunning) {
+        await html5Qrcode.stop();
+        await html5Qrcode.clear();
+        statusEl.textContent = "Scanner stopped.";
+        isRunning = false;
         startBtn.disabled = false;
         stopBtn.disabled = true;
       }
     }
 
-    startBtn.addEventListener('click', startScanner);
-    stopBtn.addEventListener('click', stopScanner);
-
-    // Auto-start on pages with HTTPS + camera available; user still has to Allow.
-    if (location.protocol === 'https:' || location.hostname === 'localhost') {
-      // Delay auto-start a bit so layout paints
-      setTimeout(() => startScanner(), 500);
-    } else {
-      statusEl.innerHTML = '<span class="warn">Site is not HTTPS. Camera may be blocked. Use GitHub Pages or localhost.</span>';
-    }
+    startBtn.addEventListener("click", startScanner);
+    stopBtn.addEventListener("click", stopScanner);
   </script>
 </body>
 </html>
